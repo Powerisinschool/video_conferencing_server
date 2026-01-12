@@ -124,6 +124,15 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			room.ListLock.Lock()
+			if peer != nil {
+				fmt.Println("Renegotiation from client not implemented yet")
+				// Ideally: handle client-side renegotiation here
+				return
+			}
+			peer = &Peer{
+				WebSocket: conn,
+				Done:      make(chan bool),
+			}
 			peerConnection, err := webrtc.NewPeerConnection(config)
 			if err != nil {
 				fmt.Println("Error creating PeerConnection:", err)
@@ -131,19 +140,17 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 			}
 			peerID := createPeerID()
 			peerIDMsg, _ := json.Marshal(peerID.String())
+			peer.SocketLock.Lock()
 			conn.WriteJSON(WebSocketMessage{
 				Event: "peer-id",
 				Data:  peerIDMsg,
 			})
+			peer.SocketLock.Unlock()
 			streamID := fmt.Sprintf("stream-%s", peerID.String())
 			localTrack, err := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8}, "video", streamID)
-			peer = &Peer{
-				ID:             peerID,
-				PeerConnection: peerConnection,
-				Track:          localTrack,
-				WebSocket:      conn,
-				Done:           make(chan bool),
-			}
+			peer.ID = peerID
+			peer.PeerConnection = peerConnection
+			peer.Track = localTrack
 			room.Peers[peer.ID] = peer
 			room.ListLock.Unlock()
 
@@ -163,15 +170,10 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 
 			peer.PeerConnection.OnTrack(func(tr *webrtc.TrackRemote, r *webrtc.RTPReceiver) { // Handle incoming video tracks
 				fmt.Println("Received track:", tr.Kind())
-				// peer.Track, err = webrtc.NewTrackLocalStaticRTP(tr.Codec().RTPCodecCapability, tr.ID(), tr.StreamID())
-				// if err != nil {
-				// 	fmt.Println("Error creating local track:", err)
-				// 	return
-				// }
 
 				room.ListLock.Lock()
 				for _, otherPeer := range room.Peers {
-					if otherPeer == peer {
+					if otherPeer.ID == peer.ID {
 						continue // Don't send to self
 					}
 
@@ -293,7 +295,9 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 					Event: "iceCandidate",
 					Data:  candidateData,
 				}
+				peer.SocketLock.Lock()
 				err = conn.WriteJSON(resp)
+				peer.SocketLock.Unlock()
 				if err != nil {
 					fmt.Println("Error sending ICE candidate:", err)
 				}
@@ -322,7 +326,9 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 				Event: "answer",
 				Data:  answerData,
 			}
+			peer.SocketLock.Lock()
 			err = conn.WriteJSON(resp)
+			peer.SocketLock.Unlock()
 			if err != nil {
 				fmt.Println("Error sending answer:", err)
 			}
