@@ -24,60 +24,61 @@ ws.onopen = async () => {
     console.log("Received remote track", event.track.id);
     console.log("remote streams:", event.streams);
 
-    const stream = event.streams[0];
-    if (!stream) return;
+    for (const stream of event.streams) {
+      console.log("Stream ID:", stream.id, "Tracks:", stream.getTracks());
 
-    const streamId = stream.id;
+      const streamId = stream.id;
 
-    // Check if we already have this stream
-    if (remoteStreams.has(streamId)) {
-      // Stream already exists, just ensure track is added
-      const existing = remoteStreams.get(streamId);
-      if (!existing.stream.getTrackById(event.track.id)) {
-        existing.stream.addTrack(event.track);
+      // Check if we already have this stream
+      if (remoteStreams.has(streamId)) {
+        // Stream already exists, just ensure track is added
+        const existing = remoteStreams.get(streamId);
+        if (!existing.stream.getTrackById(event.track.id)) {
+          existing.stream.addTrack(event.track);
+        }
+        continue;
       }
-      return;
+
+      // Create new video element for this stream
+      const videoContainer = document.createElement("div");
+      videoContainer.className = "video-container";
+      videoContainer.id = `container-${streamId}`;
+
+      const video = document.createElement("video");
+      video.id = `video-${streamId}`;
+      video.autoplay = true;
+      video.playsInline = true;
+      video.srcObject = stream;
+
+      const label = document.createElement("span");
+      label.className = "video-label";
+      label.textContent = `Peer ${remoteStreams.size + 1}`;
+
+      videoContainer.appendChild(video);
+      videoContainer.appendChild(label);
+      document.getElementById("videoGrid").appendChild(videoContainer);
+
+      remoteStreams.set(streamId, {
+        stream,
+        videoElement: video,
+        container: videoContainer,
+      });
+
+      video.play().catch((e) => {
+        console.error("Error playing video:", e);
+      });
+
+      // DEBUG: Check if the track starts 'muted' (no data yet)
+      event.track.onunmute = () => {
+        console.log("Track unmuted (data is flowing)", event.track.id);
+      };
+
+      // Handle track ended
+      event.track.onended = () => {
+        console.log("Track ended", event.track.id);
+        removeRemoteStream(streamId);
+      };
     }
-
-    // Create new video element for this stream
-    const videoContainer = document.createElement("div");
-    videoContainer.className = "video-container";
-    videoContainer.id = `container-${streamId}`;
-
-    const video = document.createElement("video");
-    video.id = `video-${streamId}`;
-    video.autoplay = true;
-    video.playsInline = true;
-    video.srcObject = stream;
-
-    const label = document.createElement("span");
-    label.className = "video-label";
-    label.textContent = `Peer ${remoteStreams.size + 1}`;
-
-    videoContainer.appendChild(video);
-    videoContainer.appendChild(label);
-    document.getElementById("videoGrid").appendChild(videoContainer);
-
-    remoteStreams.set(streamId, {
-      stream,
-      videoElement: video,
-      container: videoContainer,
-    });
-
-    video.play().catch((e) => {
-      console.error("Error playing video:", e);
-    });
-
-    // DEBUG: Check if the track starts 'muted' (no data yet)
-    event.track.onunmute = () => {
-      console.log("Track unmuted (data is flowing)", event.track.id);
-    };
-
-    // Handle track ended
-    event.track.onended = () => {
-      console.log("Track ended", event.track.id);
-      removeRemoteStream(streamId);
-    };
   };
 
   // ICE → server
