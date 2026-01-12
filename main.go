@@ -3,9 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
+	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v4"
@@ -23,13 +26,43 @@ type Candidate struct {
 }
 
 type Room struct {
-	Peers  map[string]*webrtc.PeerConnection
-	Tracks map[string]*webrtc.TrackLocalStaticRTP
+	ListLock sync.RWMutex
+	Peers    map[uuid.UUID]*Peer
+}
+
+type Peer struct {
+	ID             uuid.UUID
+	PeerConnection *webrtc.PeerConnection
+	Track          *webrtc.TrackLocalStaticRTP
+	WebSocket      *websocket.Conn
+	SocketLock     sync.Mutex
+	// RoomID         string
+	Done chan bool
 }
 
 var upgrader websocket.Upgrader
 var config webrtc.Configuration
 var rooms map[string]*Room
+var roomsLock sync.RWMutex
+
+func createPeerID() uuid.UUID {
+	// return fmt.Sprintf("peer-%d", time.Now().UnixNano())
+	return uuid.New()
+}
+
+func cleanupPeer(peerID uuid.UUID, room *Room) {
+	fmt.Println("Cleaning up peer:", peerID.String())
+	room.ListLock.Lock()
+	defer room.ListLock.Unlock()
+
+	if peer, exists := room.Peers[peerID]; exists {
+		fmt.Println("Removing peer connection for peer:", peer.ID.String())
+		close(peer.Done)
+		peer.PeerConnection.Close()
+		delete(room.Peers, peerID)
+	}
+	fmt.Println("Cleaned up peer:", peerID.String())
+}
 
 func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -39,7 +72,7 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	var peerConnection *webrtc.PeerConnection
+	var peer *Peer
 	var room *Room
 	for {
 		var message WebSocketMessage
@@ -58,28 +91,97 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 				fmt.Println("Error unmarshaling offer data:", err)
 				continue
 			}
-			fmt.Println("Received offer:", data)
-			peerConnection, err = webrtc.NewPeerConnection(config)
+			// fmt.Println("Received offer:", data)
+			if room == nil {
+				fmt.Println("No room joined yet for this peer")
+				continue
+			}
+			room.ListLock.Lock()
+			peerConnection, err := webrtc.NewPeerConnection(config)
 			if err != nil {
 				fmt.Println("Error creating PeerConnection:", err)
 				continue
 			}
-			peerID := "peerID" // Replace with actual peer ID from your logic
-			room.Peers[peerID] = peerConnection
-			room.Tracks[peerID], err = webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8}, "video", "pion")
-			if err != nil {
-				fmt.Println("Error creating local track:", err)
-				continue
+			peerID := createPeerID()
+			peerIDMsg, _ := json.Marshal(peerID.String())
+			conn.WriteJSON(WebSocketMessage{
+				Event: "peer-id",
+				Data:  peerIDMsg,
+			})
+			localTrack, err := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8}, "video", "pion")
+			peer = &Peer{
+				ID:             peerID,
+				PeerConnection: peerConnection,
+				Track:          localTrack,
+				WebSocket:      conn,
+				Done:           make(chan bool),
 			}
-			_, err = peerConnection.AddTrack(room.Tracks[peerID])
-			if err != nil {
-				fmt.Println("Error adding local track to PeerConnection:", err)
-				continue
+			room.Peers[peer.ID] = peer
+			room.ListLock.Unlock()
+
+			for _, otherPeer := range room.Peers {
+				if otherPeer.ID == peer.ID {
+					continue
+				}
+				if otherPeer.Track == nil {
+					continue
+				}
+				fmt.Println("Found existing track in room:", otherPeer.Track.ID(), "belonging to peer:", otherPeer.ID.String())
+				_, err = peer.PeerConnection.AddTrack(otherPeer.Track)
+				if err != nil {
+					fmt.Println("Error adding existing track to PeerConnection:", err)
+				}
 			}
-			done := make(chan bool) // Channel to signal goroutines to stop (on peer disconnect)
-			peerConnection.OnTrack(func(tr *webrtc.TrackRemote, r *webrtc.RTPReceiver) {
+
+			peer.PeerConnection.OnTrack(func(tr *webrtc.TrackRemote, r *webrtc.RTPReceiver) { // Handle incoming video tracks
 				fmt.Println("Received track:", tr.Kind())
-				fmt.Println("Received track:", tr.Kind().String())
+				// peer.Track, err = webrtc.NewTrackLocalStaticRTP(tr.Codec().RTPCodecCapability, tr.ID(), tr.StreamID())
+				// if err != nil {
+				// 	fmt.Println("Error creating local track:", err)
+				// 	return
+				// }
+
+				room.ListLock.Lock()
+				for _, otherPeer := range room.Peers {
+					if otherPeer == peer {
+						continue // Don't send to self
+					}
+
+					fmt.Println("Adding track to other peer:", otherPeer.ID.String())
+					_, err = otherPeer.PeerConnection.AddTrack(peer.Track)
+					if err != nil {
+						fmt.Println("Error adding track to PeerConnection:", err)
+					}
+
+					// Renegotiate with existing peer
+					offer, err := otherPeer.PeerConnection.CreateOffer(nil)
+					if err != nil {
+						fmt.Println("Error creating renegotiation offer:", err)
+						continue
+					}
+
+					err = otherPeer.PeerConnection.SetLocalDescription(offer)
+					if err != nil {
+						fmt.Println("Error setting local renegotiation description:", err)
+						continue
+					}
+
+					offerData, _ := json.Marshal(offer.SDP)
+					msg := WebSocketMessage{
+						Event: "offer",
+						Data:  offerData,
+					}
+
+					otherPeer.SocketLock.Lock()
+					err = otherPeer.WebSocket.WriteJSON(msg)
+					otherPeer.SocketLock.Unlock()
+
+					if err != nil {
+						fmt.Println("Error sending renegotiation offer:", err)
+					}
+				}
+				room.ListLock.Unlock()
+
 				// PLI Ticker
 				go func() {
 					ticker := time.NewTicker(3 * time.Second)
@@ -90,13 +192,13 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 						case <-ticker.C:
 							// Send a PLI on the "receiver"
 							fmt.Printf("Track ID: %s, Kind: %s\n", tr.ID(), tr.Kind().String())
-							rtcpSendErr := peerConnection.WriteRTCP([]rtcp.Packet{
+							rtcpSendErr := peer.PeerConnection.WriteRTCP([]rtcp.Packet{
 								&rtcp.PictureLossIndication{MediaSSRC: uint32(tr.SSRC())},
 							})
 							if rtcpSendErr != nil {
 								fmt.Println("Error sending RTCP:", rtcpSendErr)
 							}
-						case <-done:
+						case <-peer.Done:
 							return
 						}
 					}
@@ -104,26 +206,46 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 
 				// RTP Pump
 				go func() {
+					raddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:4002") // Debugging UDP address for VLC (tap)
+					debugConn, err := net.DialUDP("udp", nil, raddr)
+					if err != nil {
+						fmt.Println("Debug UDP Error:", err)
+					}
+					defer debugConn.Close()
+
 					buf := make([]byte, 1500)
 					for {
-						n, _, readErr := tr.Read(buf)
-						if readErr != nil {
-							fmt.Println("Error reading from track:", readErr)
-							close(done) // Signal other goroutine to stop
+						select {
+						case <-peer.Done:
 							return
-						}
-						for otherPeerID, localTrack := range room.Tracks {
-							if otherPeerID == peerID {
-								continue // Don't send to self
+						default:
+							n, _, readErr := tr.Read(buf)
+							if readErr != nil {
+								fmt.Println("Error reading from track:", readErr)
+								// close(peer.Done) // Signal other goroutine to stop
+								return
 							}
-							if _, err := localTrack.Write(buf[:n]); err != nil {
-								fmt.Println("Error writing to local track:", err)
+
+							if debugConn != nil {
+								debugConn.Write(buf[:n])
 							}
+
+							room.ListLock.Lock()
+							for _, targetPeer := range room.Peers {
+								if targetPeer.ID == peer.ID {
+									continue // Don't send to self
+								}
+								if _, err := targetPeer.Track.Write(buf[:n]); err != nil {
+									fmt.Println("Error writing to local track:", err)
+								}
+							}
+							room.ListLock.Unlock()
 						}
 					}
 				}()
-			}) // Handle incoming video tracks
-			peerConnection.OnICECandidate(func(c *webrtc.ICECandidate) {
+			})
+
+			peer.PeerConnection.OnICECandidate(func(c *webrtc.ICECandidate) {
 				if c == nil {
 					return
 				}
@@ -150,13 +272,13 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 				Type: webrtc.SDPTypeOffer,
 				SDP:  data,
 			}
-			peerConnection.SetRemoteDescription(offer)
-			answer, err := peerConnection.CreateAnswer(nil)
+			peer.PeerConnection.SetRemoteDescription(offer)
+			answer, err := peer.PeerConnection.CreateAnswer(nil)
 			if err != nil {
 				fmt.Println("Error creating answer:", err)
 				continue
 			}
-			err = peerConnection.SetLocalDescription(answer)
+			err = peer.PeerConnection.SetLocalDescription(answer)
 			if err != nil {
 				fmt.Println("Error setting local description:", err)
 				continue
@@ -174,12 +296,33 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				fmt.Println("Error sending answer:", err)
 			}
+			peer.PeerConnection.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
+				fmt.Println("Peer Connection State has changed:", state.String())
+				if state == webrtc.PeerConnectionStateClosed ||
+					state == webrtc.PeerConnectionStateFailed ||
+					state == webrtc.PeerConnectionStateDisconnected {
+					cleanupPeer(peer.ID, room)
+				}
+			})
 		case "answer":
 			// Client is responding to us
 			fmt.Println("Client is responding to us")
 		case "iceCandidate":
-			if peerConnection != nil {
-				// peerConnection.AddICECandidate()
+			var candidatePayload Candidate
+			err := json.Unmarshal(message.Data, &candidatePayload)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+			if peer.PeerConnection != nil {
+				candidate := webrtc.ICECandidateInit{
+					Candidate:     candidatePayload.Candidate,
+					SDPMid:        &candidatePayload.SDPMid,
+					SDPMLineIndex: &candidatePayload.SDPMLineIndex,
+				}
+				if err := peer.PeerConnection.AddICECandidate(candidate); err != nil {
+					fmt.Println(err)
+				}
 			}
 		case "join":
 			// Client wants to join a room
@@ -193,16 +336,21 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
+			roomsLock.Lock()
 			if _, exists := rooms[payload.RoomID]; !exists {
+				fmt.Println("Creating new room:", payload.RoomID)
 				rooms[payload.RoomID] = &Room{
-					Peers:  make(map[string]*webrtc.PeerConnection),
-					Tracks: make(map[string]*webrtc.TrackLocalStaticRTP),
+					Peers: make(map[uuid.UUID]*Peer),
 				}
 			}
 			room = rooms[payload.RoomID]
+			roomsLock.Unlock()
 		default:
 			fmt.Println("Unsupported event specified:", message.Event)
 		}
+	}
+	if peer.PeerConnection != nil && room != nil {
+		cleanupPeer(peer.ID, room)
 	}
 }
 
