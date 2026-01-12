@@ -33,7 +33,7 @@ type Room struct {
 type Peer struct {
 	ID             uuid.UUID
 	PeerConnection *webrtc.PeerConnection
-	Track          *webrtc.TrackLocalStaticRTP
+	Tracks         []*webrtc.TrackLocalStaticRTP
 	WebSocket      *websocket.Conn
 	SocketLock     sync.Mutex
 	// RoomID         string
@@ -147,10 +147,29 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 			})
 			peer.SocketLock.Unlock()
 			streamID := fmt.Sprintf("stream-%s", peerID.String())
-			localTrack, err := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8}, "video", streamID)
+			videoTrack, err := webrtc.NewTrackLocalStaticRTP(
+				webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8},
+				"video",
+				streamID,
+			)
+			if err != nil {
+				fmt.Println("Error creating local video track:", err)
+				room.ListLock.Unlock()
+				continue
+			}
+			audioTrack, err := webrtc.NewTrackLocalStaticRTP(
+				webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus},
+				"audio",
+				streamID,
+			)
+			if err != nil {
+				fmt.Println("Error creating local audio track:", err)
+				room.ListLock.Unlock()
+				continue
+			}
 			peer.ID = peerID
 			peer.PeerConnection = peerConnection
-			peer.Track = localTrack
+			peer.Tracks = []*webrtc.TrackLocalStaticRTP{videoTrack, audioTrack}
 			room.Peers[peer.ID] = peer
 			room.ListLock.Unlock()
 
@@ -158,11 +177,16 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 				if otherPeer.ID == peer.ID {
 					continue
 				}
-				if otherPeer.Track == nil {
+				if len(otherPeer.Tracks) == 0 {
 					continue
 				}
-				fmt.Println("Found existing track in room:", otherPeer.Track.ID(), "belonging to peer:", otherPeer.ID.String())
-				_, err = peer.PeerConnection.AddTrack(otherPeer.Track)
+				fmt.Println("Found existing video track in room:", otherPeer.Tracks[0].ID(), "belonging to peer:", otherPeer.ID.String())
+				fmt.Println("Found existing audio track in room:", otherPeer.Tracks[1].ID(), "belonging to peer:", otherPeer.ID.String())
+				_, err = peer.PeerConnection.AddTrack(otherPeer.Tracks[0]) // Video track
+				if err != nil {
+					fmt.Println("Error adding existing track to PeerConnection:", err)
+				}
+				_, err = peer.PeerConnection.AddTrack(otherPeer.Tracks[1]) // Audio track
 				if err != nil {
 					fmt.Println("Error adding existing track to PeerConnection:", err)
 				}
@@ -178,9 +202,21 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 					}
 
 					fmt.Println("Adding track to other peer:", otherPeer.ID.String())
-					_, err = otherPeer.PeerConnection.AddTrack(peer.Track)
-					if err != nil {
-						fmt.Println("Error adding track to PeerConnection:", err)
+					// for _, existingTrack := range otherPeer.Tracks {
+					// 	if existingTrack.ID() == tr.ID() {
+					// 		fmt.Println("Track already exists for peer:", otherPeer.ID.String())
+					// 		continue
+					// 	}
+					// }
+					for _, t := range peer.Tracks {
+						if t.ID() == tr.ID() {
+							fmt.Println("Track already exists in sender peer:", peer.ID.String())
+							continue
+						}
+						_, err = otherPeer.PeerConnection.AddTrack(t)
+						if err != nil {
+							fmt.Println("Error adding track to PeerConnection:", err)
+						}
 					}
 
 					// Renegotiate with existing peer
@@ -268,9 +304,18 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 							// 		fmt.Println("Error writing to local track:", err)
 							// 	}
 							// }
-							if _, err := peer.Track.Write(buf[:n]); err != nil {
-								fmt.Println("Error writing to local track:", err)
+							if tr.Kind() == webrtc.RTPCodecTypeVideo {
+								if _, err := peer.Tracks[0].Write(buf[:n]); err != nil {
+									fmt.Println("Error writing to local video track:", err)
+								}
+							} else if tr.Kind() == webrtc.RTPCodecTypeAudio {
+								if _, err := peer.Tracks[1].Write(buf[:n]); err != nil {
+									fmt.Println("Error writing to local audio track:", err)
+								}
 							}
+							// if _, err := peer.Track.Write(buf[:n]); err != nil {
+							// 	fmt.Println("Error writing to local track:", err)
+							// }
 							room.ListLock.Unlock()
 						}
 					}

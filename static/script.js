@@ -102,7 +102,7 @@ ws.onopen = async () => {
   // Get camera
   const stream = await navigator.mediaDevices.getUserMedia({
     video: true,
-    audio: false,
+    audio: true,
   });
 
   localStream = stream;
@@ -242,6 +242,27 @@ function toggleCamera() {
   }
 
   console.log(`Camera ${cameraEnabled ? "enabled" : "disabled"}`);
+}
+
+function toggleMic() {
+  if (!localStream) return;
+
+  const audioTrack = localStream.getAudioTracks()[0];
+  if (!audioTrack) return;
+
+  const micEnabled = audioTrack.enabled;
+  audioTrack.enabled = !micEnabled;
+
+  const btn = document.getElementById("micBtn");
+  if (audioTrack.enabled) {
+    btn.textContent = "Turn Off Microphone";
+    btn.classList.remove("mic-off");
+  } else {
+    btn.textContent = "Turn On Microphone";
+    btn.classList.add("mic-off");
+  }
+
+  console.log(`Microphone ${audioTrack.enabled ? "enabled" : "disabled"}`);
 }
 
 function joinRoom() {
