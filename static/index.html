@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>SFU Test Client</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <h2>SFU Test Client</h2>
+
+    <div class="group">
+      <input
+        type="text"
+        name="roomIdInput"
+        id="roomIdInput"
+        placeholder="Room ID"
+      />
+      <button id="joinBtn" onclick="joinRoom()">Join Room</button>
+    </div>
+    <div id="videoGrid" class="video-grid">
+      <div class="video-container local">
+        <video id="localVideo" autoplay muted playsinline></video>
+        <span class="video-label">You</span>
+      </div>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>

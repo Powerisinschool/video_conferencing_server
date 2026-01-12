@@ -1,2 +1,5 @@
 # Binaries
 video_conferencing_server
+
+# IDE settings
+.vscode/

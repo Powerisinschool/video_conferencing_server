@@ -55,11 +55,29 @@ func cleanupPeer(peerID uuid.UUID, room *Room) {
 	room.ListLock.Lock()
 	defer room.ListLock.Unlock()
 
-	if peer, exists := room.Peers[peerID]; exists {
-		fmt.Println("Removing peer connection for peer:", peer.ID.String())
-		close(peer.Done)
-		peer.PeerConnection.Close()
-		delete(room.Peers, peerID)
+	peer, exists := room.Peers[peerID]
+
+	if !exists {
+		return
+	}
+
+	fmt.Println("Removing peer connection for peer:", peer.ID.String())
+	close(peer.Done)
+	peer.PeerConnection.Close()
+	delete(room.Peers, peerID)
+
+	peerLeftMsg := WebSocketMessage{
+		Event: "remove-peer",
+		Data:  json.RawMessage(fmt.Sprintf(`"%s"`, peerID.String())),
+	}
+
+	for _, p := range room.Peers {
+		// We use a helper or lock here to ensure thread safety (see Part 2)
+		p.SocketLock.Lock()
+		if err := p.WebSocket.WriteJSON(peerLeftMsg); err != nil {
+			fmt.Println("Error sending remove-peer message:", err)
+		}
+		p.SocketLock.Unlock()
 	}
 	fmt.Println("Cleaned up peer:", peerID.String())
 }
@@ -96,6 +114,15 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 				fmt.Println("No room joined yet for this peer")
 				continue
 			}
+			if len(room.Peers) >= 4 {
+				// Room is full
+				fullMsg := WebSocketMessage{
+					Event: "room-full",
+					Data:  json.RawMessage(`"Room is full"`),
+				}
+				conn.WriteJSON(fullMsg)
+				continue
+			}
 			room.ListLock.Lock()
 			peerConnection, err := webrtc.NewPeerConnection(config)
 			if err != nil {
@@ -108,7 +135,8 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 				Event: "peer-id",
 				Data:  peerIDMsg,
 			})
-			localTrack, err := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8}, "video", "pion")
+			streamID := fmt.Sprintf("stream-%s", peerID.String())
+			localTrack, err := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8}, "video", streamID)
 			peer = &Peer{
 				ID:             peerID,
 				PeerConnection: peerConnection,
@@ -222,7 +250,6 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 							n, _, readErr := tr.Read(buf)
 							if readErr != nil {
 								fmt.Println("Error reading from track:", readErr)
-								// close(peer.Done) // Signal other goroutine to stop
 								return
 							}
 
@@ -231,13 +258,16 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 							}
 
 							room.ListLock.Lock()
-							for _, targetPeer := range room.Peers {
-								if targetPeer.ID == peer.ID {
-									continue // Don't send to self
-								}
-								if _, err := targetPeer.Track.Write(buf[:n]); err != nil {
-									fmt.Println("Error writing to local track:", err)
-								}
+							// for _, targetPeer := range room.Peers {
+							// 	if targetPeer.ID == peer.ID {
+							// 		continue // Don't send to self
+							// 	}
+							// 	if _, err := targetPeer.Track.Write(buf[:n]); err != nil {
+							// 		fmt.Println("Error writing to local track:", err)
+							// 	}
+							// }
+							if _, err := peer.Track.Write(buf[:n]); err != nil {
+								fmt.Println("Error writing to local track:", err)
 							}
 							room.ListLock.Unlock()
 						}
@@ -305,8 +335,24 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 				}
 			})
 		case "answer":
-			// Client is responding to us
-			fmt.Println("Client is responding to us")
+			// Client is responding to our renegotiation offer
+			var answerData string
+			if err := json.Unmarshal(message.Data, &answerData); err != nil {
+				fmt.Println("Error unmarshaling answer data:", err)
+				continue
+			}
+
+			if peer.PeerConnection.SignalingState() != webrtc.SignalingStateStable {
+				answer := webrtc.SessionDescription{
+					Type: webrtc.SDPTypeAnswer,
+					SDP:  answerData,
+				}
+				if err := peer.PeerConnection.SetRemoteDescription(answer); err != nil {
+					fmt.Println("Error setting remote description from answer:", err)
+				}
+			} else {
+				fmt.Println("Received answer but signaling state is Stable (unexpected)")
+			}
 		case "iceCandidate":
 			var candidatePayload Candidate
 			err := json.Unmarshal(message.Data, &candidatePayload)
@@ -344,7 +390,22 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			room = rooms[payload.RoomID]
+			if len(room.Peers) >= 4 {
+				// Room is full
+				fullMsg := WebSocketMessage{
+					Event: "room-full",
+					Data:  json.RawMessage(`"Room is full"`),
+				}
+				conn.WriteJSON(fullMsg)
+				roomsLock.Unlock()
+				continue
+			}
 			roomsLock.Unlock()
+		case "leave":
+			// Client wants to leave the room
+			if peer != nil && room != nil {
+				cleanupPeer(peer.ID, room)
+			}
 		default:
 			fmt.Println("Unsupported event specified:", message.Event)
 		}
@@ -370,6 +431,8 @@ func main() {
 	rooms = make(map[string]*Room)
 
 	http.HandleFunc("/ws", handleWebsocket)
+	fs := http.FileServer(http.Dir("./static"))
+	http.Handle("/", fs)
 	fmt.Println("WebSocket server started on :8080")
 	err := http.ListenAndServe(":8080", nil)
 	if err != nil {
