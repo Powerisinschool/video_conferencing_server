@@ -34,6 +34,14 @@ body {
   background: #2563eb;
 }
 
+.group button.camera-off {
+  background: #dc2626;
+}
+
+.group button.camera-off:hover {
+  background: #b91c1c;
+}
+
 .video-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));

@@ -3,6 +3,8 @@ var roomId = "testRoom"; // Default room ID for testing
 var peerId = Math.random().toString(36).slice(2);
 
 let pc;
+let localStream = null;
+let cameraEnabled = true;
 const remoteStreams = new Map(); // trackId -> { stream, videoElement }
 
 ws.onopen = async () => {
@@ -103,6 +105,7 @@ ws.onopen = async () => {
     audio: false,
   });
 
+  localStream = stream;
   localVideo.srcObject = stream;
   console.log("local stream:", stream);
 
@@ -218,6 +221,27 @@ function forceVP8(pc) {
       }
     }
   });
+}
+
+function toggleCamera() {
+  if (!localStream) return;
+
+  const videoTrack = localStream.getVideoTracks()[0];
+  if (!videoTrack) return;
+
+  cameraEnabled = !cameraEnabled;
+  videoTrack.enabled = cameraEnabled;
+
+  const btn = document.getElementById("cameraBtn");
+  if (cameraEnabled) {
+    btn.textContent = "Turn Off Camera";
+    btn.classList.remove("camera-off");
+  } else {
+    btn.textContent = "Turn On Camera";
+    btn.classList.add("camera-off");
+  }
+
+  console.log(`Camera ${cameraEnabled ? "enabled" : "disabled"}`);
 }
 
 function joinRoom() {
