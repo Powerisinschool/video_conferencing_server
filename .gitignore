@@ -3,3 +3,5 @@ video_conferencing_server
 
 # IDE settings
 .vscode/
+
+old-main.go

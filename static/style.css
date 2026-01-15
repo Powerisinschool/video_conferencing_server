@@ -1,96 +1,152 @@
+:root {
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --text-primary: #f3f4f6;
+  --text-secondary: #94a3b8;
+  --accent-blue: #3b82f6;
+  --accent-blue-hover: #2563eb;
+  --accent-red: #ef4444;
+  --accent-red-hover: #dc2626;
+  --nav-height: 64px;
+  --control-bar-height: 80px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
 body {
-  font-family: system-ui, sans-serif;
-  background: #0f172a;
-  color: #e5e7eb;
-  padding: 20px;
-}
-
-.group {
-  margin-bottom: 20px;
-}
-
-.group input {
-  padding: 10px 15px;
-  font-size: 14px;
-  border: 1px solid #374151;
-  border-radius: 6px;
-  background: #1e293b;
-  color: #e5e7eb;
-  margin-right: 10px;
-}
-
-.group button {
-  padding: 10px 20px;
-  font-size: 14px;
-  border: none;
-  border-radius: 6px;
-  background: #3b82f6;
-  color: white;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.group button:hover {
-  background: #2563eb;
-}
-
-.group button.camera-off {
-  background: #dc2626;
-}
-
-.group button.camera-off:hover {
-  background: #b91c1c;
-}
-
-/* .video-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 15px;
-  max-width: 1400px;
-} */
-
-/* .video-container {
-  position: relative;
-  background: #1e293b;
-  border-radius: 12px;
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  height: 100vh;
   overflow: hidden;
-  aspect-ratio: 16 / 9;
-} */
+}
 
-/* .video-container video {
-  width: 100%;
+.app-container {
+  display: flex;
+  flex-direction: column;
   height: 100%;
-  object-fit: cover;
-  background: black;
-} */
-
-.video-container.local {
-  border: 2px solid #3b82f6;
 }
 
-.video-label {
-  position: absolute;
-  bottom: 10px;
-  left: 10px;
-  background: rgba(0, 0, 0, 0.6);
-  padding: 4px 10px;
-  border-radius: 4px;
-  font-size: 12px;
+/* Header */
+.app-header {
+  height: var(--nav-height);
+  background-color: var(--bg-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  z-index: 10;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo-icon {
+  width: 32px;
+  height: 32px;
+  background: linear-gradient(135deg, var(--accent-blue), #60a5fa);
+  border-radius: 8px;
+}
+
+.app-header h1 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.join-controls {
+  display: flex;
+  gap: 12px;
+}
+
+input[type="text"] {
+  background-color: var(--bg-primary);
+  border: 1px solid #334155;
+  color: var(--text-primary);
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color 0.2s;
+  min-width: 200px;
+}
+
+input[type="text"]:focus {
+  border-color: var(--accent-blue);
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 500;
+  font-size: 0.875rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+.btn.primary {
+  background-color: var(--accent-blue);
   color: white;
+  padding: 8px 16px;
 }
 
+.btn.primary:hover {
+  background-color: var(--accent-blue-hover);
+}
+
+/* Video Grid */
 .video-grid {
+  flex: 1;
+  padding: 20px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 20px;
+  overflow-y: auto;
+  align-content: center;
+}
+
+/* If only one video, center it and make it larger but constrained */
+.video-grid:has(> .video-container:only-child) {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.video-grid:has(> .video-container:only-child) .video-container {
   width: 100%;
+  max-width: 900px;
+  aspect-ratio: 16/9;
 }
 
 .video-container {
   position: relative;
-  background: black;
-  border-radius: 8px;
+  background-color: #000;
+  border-radius: 12px;
   overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  aspect-ratio: 16/9;
+  border: 1px solid #334155;
+}
+
+.video-container.local {
+  border: 2px solid var(--accent-blue);
+}
+
+#localVideo {
+  transform: scaleX(-1);
 }
 
 video {
@@ -99,12 +155,98 @@ video {
   object-fit: cover;
 }
 
-.label {
+.video-overlay {
   position: absolute;
-  bottom: 5px;
-  left: 5px;
-  background: rgba(0, 0, 0, 0.5);
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 12px;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 16px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.7), transparent);
+  display: flex;
+  align-items: center;
+}
+
+.video-label {
+  color: white;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Control Bar */
+.control-bar {
+  height: var(--control-bar-height);
+  background-color: var(--bg-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 0 24px;
+  border-top: 1px solid #334155;
+}
+
+.btn.control {
+  background-color: #334155;
+  color: var(--text-primary);
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  padding: 0;
+  flex-direction: column;
+  gap: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn.control:hover {
+  background-color: #475569;
+}
+
+.btn.control .icon {
+  width: 24px;
+  height: 24px;
+}
+
+.btn.control .btn-text {
+  display: none; /* Hide text for circular buttons, can tooltip later */
+}
+
+/* Active/Inactive States */
+.camera-off .icon,
+.mic-off .icon {
+  position: relative;
+}
+
+/* Red button for disabled state */
+.btn.control.camera-off,
+.btn.control.mic-off {
+  background-color: var(--accent-red);
+  color: white;
+}
+
+.btn.control.camera-off:hover,
+.btn.control.mic-off:hover {
+  background-color: var(--accent-red-hover);
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .app-header {
+    padding: 0 16px;
+  }
+
+  .brand h1 {
+    display: none; /* Hide title on small screens */
+  }
+
+  .video-grid {
+    grid-template-columns: 1fr;
+    padding: 10px;
+    gap: 10px;
+  }
+
+  .join-controls input {
+    min-width: 120px;
+    max-width: 150px;
+  }
 }

@@ -52,12 +52,16 @@ ws.onopen = async () => {
       video.playsInline = true;
       video.srcObject = stream;
 
+      const overlay = document.createElement("div");
+      overlay.className = "video-overlay";
+
       const label = document.createElement("span");
       label.className = "video-label";
       label.textContent = `Peer ${remoteStreams.size + 1}`;
 
+      overlay.appendChild(label);
       videoContainer.appendChild(video);
-      videoContainer.appendChild(label);
+      videoContainer.appendChild(overlay);
       document.getElementById("videoGrid").appendChild(videoContainer);
 
       remoteStreams.set(streamId, {
@@ -165,7 +169,7 @@ ws.onmessage = async (msg) => {
     peerId = message.data; // Server is authoritative, update local peerId
   }
 
-  if (message.event === "remove-peer") {
+  if (message.event === "peer-left") {
     const removedPeerId = message.data;
     console.log("Removing peer:", removedPeerId);
     removeRemoteStream(`stream-${removedPeerId}`);
@@ -234,10 +238,8 @@ function toggleCamera() {
 
   const btn = document.getElementById("cameraBtn");
   if (cameraEnabled) {
-    btn.textContent = "Turn Off Camera";
     btn.classList.remove("camera-off");
   } else {
-    btn.textContent = "Turn On Camera";
     btn.classList.add("camera-off");
   }
 
@@ -255,10 +257,8 @@ function toggleMic() {
 
   const btn = document.getElementById("micBtn");
   if (audioTrack.enabled) {
-    btn.textContent = "Turn Off Microphone";
     btn.classList.remove("mic-off");
   } else {
-    btn.textContent = "Turn On Microphone";
     btn.classList.add("mic-off");
   }
 
