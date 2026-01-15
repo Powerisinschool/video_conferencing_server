@@ -229,6 +229,112 @@ video {
   background-color: var(--accent-red-hover);
 }
 
+.hidden {
+  display: none !important;
+}
+
+/* LOBBY STYLES */
+.lobby-container {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--bg-primary);
+}
+
+.lobby-card {
+  background-color: var(--bg-secondary);
+  padding: 40px;
+  border-radius: 16px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  width: 100%;
+  max-width: 400px;
+  text-align: center;
+  border: 1px solid #334155;
+}
+
+.brand.large {
+  flex-direction: column;
+  margin-bottom: 32px;
+}
+
+.logo-icon.large {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 16px;
+}
+
+.brand.large h1 {
+  font-size: 1.75rem;
+}
+
+.join-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.btn.full-width {
+  width: 100%;
+  padding: 12px;
+  font-size: 1rem;
+}
+
+/* Room View Container */
+.room-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Leave Button Style */
+.btn.control.leave-btn {
+  background-color: rgba(239, 68, 68, 0.1); /* Red tint */
+  border: 1px solid var(--accent-red);
+  color: var(--accent-red);
+}
+
+.btn.control.leave-btn:hover {
+  background-color: var(--accent-red);
+  color: white;
+}
+
+/* Notifications */
+.notification-container {
+  position: fixed;
+  bottom: 100px; /* Sits above the control bar */
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 1000;
+  pointer-events: none; /* Let clicks pass through container */
+}
+
+.notification-toast {
+  background-color: var(--bg-secondary);
+  border: 1px solid #334155;
+  color: var(--text-primary);
+  padding: 12px 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  animation: slideIn 0.3s ease-out forwards;
+  pointer-events: auto; /* Re-enable clicks on the toast itself */
+  min-width: 250px;
+}
+
+.notification-toast.info {
+  border-left: 4px solid var(--accent-blue);
+}
+
+.notification-toast.error {
+  border-left: 4px solid var(--accent-red);
+}
+
 /* Responsive */
 @media (max-width: 640px) {
   .app-header {
@@ -248,5 +354,27 @@ video {
   .join-controls input {
     min-width: 120px;
     max-width: 150px;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(20px);
   }
 }

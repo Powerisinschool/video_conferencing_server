@@ -12,89 +12,131 @@
   </head>
   <body>
     <div class="app-container">
-      <header class="app-header">
-        <div class="brand">
-          <div class="logo-icon"></div>
-          <h1>SFU Stream</h1>
-        </div>
-        <div class="join-controls">
-          <input
-            type="text"
-            name="roomIdInput"
-            id="roomIdInput"
-            placeholder="Enter Room ID"
-          />
-          <button id="joinBtn" class="btn primary" onclick="joinRoom()">
-            Join
-          </button>
-        </div>
-      </header>
-
-      <main id="videoGrid" class="video-grid">
-        <div class="video-container local">
-          <video id="localVideo" autoplay muted playsinline></video>
-          <div class="video-overlay">
-            <span class="video-label">You</span>
+      <div id="lobbyView" class="lobby-container">
+        <div class="lobby-card">
+          <div class="brand large">
+            <div class="logo-icon large"></div>
+            <h1>SFU Stream</h1>
+          </div>
+          <div class="join-form">
+            <input
+              type="text"
+              id="lobbyRoomInput"
+              placeholder="Enter Room ID"
+              value="testRoom"
+            />
+            <button
+              id="lobbyJoinBtn"
+              class="btn primary full-width"
+              onclick="joinRoomFromLobby()"
+            >
+              Join Room
+            </button>
           </div>
         </div>
-      </main>
+      </div>
 
-      <footer class="control-bar">
-        <button
-          id="cameraBtn"
-          class="btn control"
-          onclick="toggleCamera()"
-          title="Toggle Camera"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            class="icon"
+      <div id="roomView" class="room-container hidden">
+        <header class="app-header">
+          <div class="brand">
+            <div class="logo-icon"></div>
+            <h1 id="headerTitle">Room: ...</h1>
+          </div>
+          <div class="header-controls"></div>
+        </header>
+
+        <main id="videoGrid" class="video-grid">
+          <div class="video-container local" id="localVideoContainer">
+            <video id="localVideo" autoplay muted playsinline></video>
+            <div class="video-overlay">
+              <span class="video-label">You</span>
+            </div>
+          </div>
+        </main>
+
+        <footer class="control-bar">
+          <button
+            id="cameraBtn"
+            class="btn control"
+            onclick="toggleCamera()"
+            title="Toggle Camera"
           >
-            <path
-              d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"
-            ></path>
-            <circle cx="12" cy="13" r="4"></circle>
-          </svg>
-          <span class="btn-text">Camera</span>
-        </button>
-        <button
-          id="micBtn"
-          class="btn control"
-          onclick="toggleMic()"
-          title="Toggle Microphone"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            class="icon"
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="icon"
+            >
+              <path
+                d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"
+              ></path>
+              <circle cx="12" cy="13" r="4"></circle>
+            </svg>
+            <span class="btn-text">Camera</span>
+          </button>
+          <button
+            id="micBtn"
+            class="btn control"
+            onclick="toggleMic()"
+            title="Toggle Microphone"
           >
-            <path
-              d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"
-            ></path>
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-            <line x1="12" y1="19" x2="12" y2="23"></line>
-            <line x1="8" y1="23" x2="16" y2="23"></line>
-          </svg>
-          <span class="btn-text">Mic</span>
-        </button>
-      </footer>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="icon"
+            >
+              <path
+                d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"
+              ></path>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+              <line x1="12" y1="19" x2="12" y2="23"></line>
+              <line x1="8" y1="23" x2="16" y2="23"></line>
+            </svg>
+            <span class="btn-text">Mic</span>
+          </button>
+          <button
+            id="leaveBtn"
+            class="btn control leave-btn"
+            onclick="leaveRoom()"
+            title="Leave Room"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="icon icon-tabler icons-tabler-outline icon-tabler-phone-x"
+            >
+              <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+              <path
+                d="M5 4h4l2 5l-2.5 1.5a11 11 0 0 0 5 5l1.5 -2.5l5 2v4a2 2 0 0 1 -2 2a16 16 0 0 1 -15 -15a2 2 0 0 1 2 -2"
+              />
+              <path d="M16 4l4 4m0 -4l-4 4" />
+            </svg>
+            <span class="btn-text">Leave</span>
+          </button>
+        </footer>
+      </div>
+      <div id="notificationContainer" class="notification-container"></div>
     </div>
-
     <script src="script.js"></script>
   </body>
 </html>
