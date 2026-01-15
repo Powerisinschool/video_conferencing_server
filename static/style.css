@@ -213,19 +213,40 @@ video {
 
 /* Active/Inactive States */
 .camera-off .icon,
-.mic-off .icon {
+.mic-off .icon,
+.screen-sharing .icon {
   position: relative;
 }
 
 /* Red button for disabled state */
 .btn.control.camera-off,
-.btn.control.mic-off {
+.btn.control.mic-off,
+.btn.control.screen-sharing {
   background-color: var(--accent-red);
   color: white;
 }
 
+.btn.control .icon.camera-off,
+.btn.control .icon.muted,
+.btn.control .icon.stop-screen-share {
+  display: none;
+}
+
+.btn.control.camera-off .icon.camera-on,
+.btn.control.mic-off .icon.unmuted,
+.btn.control.screen-sharing .icon.start-screen-share {
+  display: none;
+}
+
+.btn.control.camera-off .icon.camera-off,
+.btn.control.mic-off .icon.muted,
+.btn.control.screen-sharing .icon.stop-screen-share {
+  display: block;
+}
+
 .btn.control.camera-off:hover,
-.btn.control.mic-off:hover {
+.btn.control.mic-off:hover,
+.btn.control.screen-sharing:hover {
   background-color: var(--accent-red-hover);
 }
 

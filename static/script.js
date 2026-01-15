@@ -4,6 +4,7 @@ let roomId = "testRoom";
 let peerId = Math.random().toString(36).slice(2);
 
 let localStream = null;
+let shareScreenStream = null;
 let cameraEnabled = true;
 const remoteStreams = new Map(); // trackId -> { stream, videoElement }
 
@@ -301,6 +302,48 @@ function toggleMic() {
     document
       .getElementById("micBtn")
       .classList.toggle("mic-off", !audioTrack.enabled);
+  }
+}
+
+function shareScreen() {
+  // alert("Screen sharing is not implemented in this demo.");
+  if (shareScreenStream) {
+    // Stop screen sharing
+    shareScreenStream.getTracks().forEach((track) => track.stop());
+    shareScreenStream = null;
+    document.getElementById("shareBtn").classList.remove("screen-sharing");
+    // Revert to camera video track
+    const videoTrack = localStream.getVideoTracks()[0];
+    if (videoTrack && pc) {
+      pc.getSenders().forEach((sender) => {
+        if (sender.track && sender.track.kind === "video") {
+          sender.replaceTrack(videoTrack);
+        }
+      });
+    }
+  } else {
+    // Start screen sharing
+    navigator.mediaDevices
+      .getDisplayMedia({ video: true })
+      .then((stream) => {
+        shareScreenStream = stream;
+        document.getElementById("shareBtn").classList.add("screen-sharing");
+        const screenTrack = stream.getVideoTracks()[0];
+        if (screenTrack && pc) {
+          pc.getSenders().forEach((sender) => {
+            if (sender.track && sender.track.kind === "video") {
+              sender.replaceTrack(screenTrack);
+            }
+          });
+        }
+        // Listen for when the user stops sharing the screen
+        screenTrack.onended = () => {
+          shareScreen();
+        };
+      })
+      .catch((e) => {
+        console.error("Error sharing screen:", e);
+      });
   }
 }
 
