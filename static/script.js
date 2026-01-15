@@ -111,10 +111,9 @@ ws.onopen = async () => {
 
   localStream = stream;
   localVideo.srcObject = stream;
-  console.log("local stream:", stream);
+  // console.log("local stream:", stream);
 
   stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-
   forceVP8(pc);
 
   // Create offer

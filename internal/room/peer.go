@@ -68,15 +68,7 @@ func (r *Room) InitializePeer(id string, displayName *string, ws *websocket.Conn
 		currentPeer.SignalLock = sync.Mutex{}
 		currentPeer.Done = make(chan bool)
 	}
-	// p := &models.Peer{
-	// 	ID:             uuid.New(),
-	// 	DisplayName:    displayName,
-	// 	PeerConnection: nil,
-	// 	Tracks:         []*webrtc.TrackLocalStaticRTP{},
-	// 	WebSocket:      ws,
-	// 	SocketLock:     sync.Mutex{},
-	// 	Done:           make(chan bool),
-	// }
+
 	if _, exists := r.Peers[currentPeer.ID]; exists {
 		return ErrPeerExists
 	}
@@ -301,29 +293,14 @@ func (r *Room) HandleOffer(p *models.Peer, offerData json.RawMessage) error {
 		logger.LogError("Peer is not created when handling offer", "roomId", r.ID, "peerId", p.ID.String()) // This can also happen
 		return ErrOfferBeforeJoin
 	}
-	err := json.Unmarshal(offerData, &data)
-	if err != nil {
-		logger.LogError("Error unmarshaling offer data", "error", err)
-		return err
-	}
 	if p.PeerConnection == nil {
 		logger.LogError("PeerConnection is nil for peer", "peerId", p.ID.String())
 		return ErrPeerConnectionNil
 	}
-	for _, otherPeer := range r.Peers {
-		if otherPeer.ID == p.ID {
-			continue
-		}
-		if len(otherPeer.Tracks) == 0 {
-			continue
-		}
-		logger.LogInfo("Adding existing tracks from peer to new peer", "fromPeerId", otherPeer.ID.String(), "toPeerId", p.ID.String())
-		for _, track := range otherPeer.Tracks {
-			_, err = p.PeerConnection.AddTrack(track)
-			if err != nil {
-				logger.LogError("Error adding existing track to PeerConnection", "error", err, "toPeerId", p.ID.String(), "fromPeerId", otherPeer.ID.String())
-			}
-		}
+	err := json.Unmarshal(offerData, &data)
+	if err != nil {
+		logger.LogError("Error unmarshaling offer data", "error", err)
+		return err
 	}
 	offer := webrtc.SessionDescription{
 		Type: webrtc.SDPTypeOffer,
@@ -354,6 +331,11 @@ func (r *Room) HandleOffer(p *models.Peer, offerData json.RawMessage) error {
 
 // HandleAnswer processes an incoming answer from a peer
 func (r *Room) HandleAnswer(p *models.Peer, answerData json.RawMessage) error {
+	if p.PeerConnection == nil {
+		logger.LogError("PeerConnection is nil for peer", "peerId", p.ID.String())
+		return ErrPeerConnectionNil
+	}
+
 	var data string
 	if err := json.Unmarshal(answerData, &data); err != nil {
 		logger.LogError("Error unmarshaling answer data", "error", err)
@@ -396,6 +378,27 @@ func (r *Room) HandleIceCandidate(p *models.Peer, candidateData json.RawMessage)
 	return nil
 }
 
+func (r *Room) AddTracksToPeer(p *models.Peer) {
+	r.ListLock.RLock()
+	defer r.ListLock.RUnlock()
+
+	for _, otherPeer := range r.Peers {
+		if otherPeer.ID == p.ID {
+			continue // Skip self
+		}
+		if len(otherPeer.Tracks) == 0 {
+			continue // No tracks to add
+		}
+		// logger.LogInfo("Adding existing tracks from peer to new peer", "fromPeerId", otherPeer.ID.String(), "toPeerId", p.ID.String())
+		for _, track := range otherPeer.Tracks {
+			_, err := p.PeerConnection.AddTrack(track)
+			if err != nil {
+				logger.LogError("Error adding track to PeerConnection", "error", err, "peerId", p.ID.String())
+			}
+		}
+	}
+}
+
 func (r *Room) IsCreated() bool {
 	return r.ID != ""
 }
@@ -415,8 +418,8 @@ func (r *Room) RemovePeer(p *models.Peer) {
 		peer.PeerConnection.Close()
 	}
 	delete(r.Peers, p.ID)
-	for _, p := range r.Peers {
-		SignalPeer(p, "peer-left", p.ID.String(), true)
+	for _, px := range r.Peers {
+		SignalPeer(px, "peer-left", p.ID.String(), true)
 	}
 	logger.LogInfo("Peer removed from room", "peerId", p.ID.String(), "roomId", r.ID)
 }

@@ -136,6 +136,7 @@ func (h *WebSocketHandler) handleJoin(conn *websocket.Conn, data json.RawMessage
 		return currentRoom, err
 	}
 	currentRoom.SignalPeer(currentPeer, "peer-id", currentPeer.ID.String(), true)
+	currentRoom.AddTracksToPeer(currentPeer) // Should only add existing tracks to the new peer on join
 	logger.LogInfo("Peer joined room", "peerId", currentPeer.ID.String(), "roomId", currentRoom.ID)
 	logger.LogInfo("Current number of peers in room", "count", len(currentRoom.Peers))
 	fmt.Println("peer:", currentPeer)
