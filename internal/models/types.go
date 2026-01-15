@@ -45,13 +45,15 @@ type ManagementDetails struct {
 }
 
 type Peer struct {
-	ID             uuid.UUID
-	DisplayName    *string
-	PeerConnection *webrtc.PeerConnection
-	Tracks         []*webrtc.TrackLocalStaticRTP
-	WebSocket      *websocket.Conn
-	SocketLock     sync.Mutex
-	SignalLock     sync.Mutex
+	ID                   uuid.UUID
+	DisplayName          *string
+	PeerConnection       *webrtc.PeerConnection
+	Tracks               []*webrtc.TrackLocalStaticRTP
+	WebSocket            *websocket.Conn
+	SocketLock           sync.Mutex
+	SignalLock           sync.Mutex
+	RenegotiationPending bool
+	IsNegotiating        bool
 	// RoomID         string
 	Done chan bool
 }

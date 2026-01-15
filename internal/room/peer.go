@@ -152,25 +152,30 @@ func (r *Room) newPeerConnection(p *models.Peer) error {
 					logger.LogError("Error adding track to PeerConnection", "error", err, "toPeerId", otherPeer.ID.String(), "fromPeerId", p.ID.String())
 				}
 			}
+			// logger.LogInfo("Track 1:", p.Tracks[0].ID)
+			// logger.LogInfo("Track 2:", p.Tracks[1].ID)
 
 			// Renegotiate with existing peer
-			offer, err := otherPeer.PeerConnection.CreateOffer(nil)
-			if err != nil {
-				logger.LogError("Error creating renegotiation offer", "error", err, "peerId", otherPeer.ID.String())
-				continue
-			}
+			// offer, err := otherPeer.PeerConnection.CreateOffer(nil)
+			// if err != nil {
+			// 	logger.LogError("Error creating renegotiation offer", "error", err, "peerId", otherPeer.ID.String())
+			// 	continue
+			// }
 
-			err = otherPeer.PeerConnection.SetLocalDescription(offer)
-			if err != nil {
-				logger.LogError("Error setting local renegotiation description", "error", err, "peerId", otherPeer.ID.String())
-				continue
-			}
+			// err = otherPeer.PeerConnection.SetLocalDescription(offer)
+			// if err != nil {
+			// 	logger.LogError("Error setting local renegotiation description", "error", err, "peerId", otherPeer.ID.String())
+			// 	continue
+			// }
 
-			err = SignalPeer(otherPeer, models.MessageTypeOffer, offer.SDP, true)
-			if err != nil {
-				logger.LogError("Error signaling peer with renegotiation offer", "error", err, "peerId", otherPeer.ID.String())
-				continue
-			}
+			// err = SignalPeer(otherPeer, models.MessageTypeOffer, offer.SDP, true)
+			// if err != nil {
+			// 	logger.LogError("Error signaling peer with renegotiation offer", "error", err, "peerId", otherPeer.ID.String())
+			// 	continue
+			// }
+
+			r.AttemptRenegotiation(otherPeer)
+
 			if remoteTrack.Kind() == webrtc.RTPCodecTypeVideo {
 				go func() {
 					if err := peerConnection.WriteRTCP([]rtcp.Packet{
@@ -349,7 +354,20 @@ func (r *Room) HandleAnswer(p *models.Peer, answerData json.RawMessage) error {
 		}
 		if err := p.PeerConnection.SetRemoteDescription(answer); err != nil {
 			logger.LogError("Error setting remote description from answer", "error", err)
+			p.SignalLock.Lock()
+			p.IsNegotiating = false
+			p.SignalLock.Unlock()
 			return err
+		}
+
+		p.SignalLock.Lock()
+		p.IsNegotiating = false
+		pending := p.RenegotiationPending
+		p.SignalLock.Unlock()
+
+		// If a track came in while we were waiting for this answer, go again!
+		if pending {
+			go r.AttemptRenegotiation(p)
 		}
 	} else {
 		logger.Logger.Warn("Received answer but signaling state is Stable (unexpected)", "peerId", p.ID.String())
@@ -397,6 +415,59 @@ func (r *Room) AddTracksToPeer(p *models.Peer) {
 			}
 		}
 	}
+}
+
+// AttemptRenegotiation initiates a renegotiation with the specified peer
+func (r *Room) AttemptRenegotiation(p *models.Peer) {
+	p.SignalLock.Lock()
+	defer p.SignalLock.Unlock()
+
+	// If we are already negotiating, just mark that we need another one later
+	if p.IsNegotiating {
+		p.RenegotiationPending = true
+		return
+	}
+
+	// Lock the state and proceed
+	p.IsNegotiating = true
+	p.RenegotiationPending = false
+
+	go func() {
+		// Use a local error handling block to reset IsNegotiating on failure
+		defer func() {
+			if r := recover(); r != nil {
+				// Handle panic if necessary
+			}
+		}()
+
+		offer, err := p.PeerConnection.CreateOffer(nil)
+		if err != nil {
+			logger.LogError("Error creating renegotiation offer", "error", err, "peerId", p.ID.String())
+			p.SignalLock.Lock()
+			p.IsNegotiating = false
+			p.SignalLock.Unlock()
+			return
+		}
+
+		err = p.PeerConnection.SetLocalDescription(offer)
+		if err != nil {
+			logger.LogError("Error setting local renegotiation description", "error", err, "peerId", p.ID.String())
+			p.SignalLock.Lock()
+			p.IsNegotiating = false
+			p.SignalLock.Unlock()
+			return
+		}
+
+		err = SignalPeer(p, models.MessageTypeOffer, offer.SDP, true)
+		if err != nil {
+			logger.LogError("Error signaling peer with renegotiation offer", "error", err, "peerId", p.ID.String())
+			p.SignalLock.Lock()
+			p.IsNegotiating = false
+			p.SignalLock.Unlock()
+			return
+		}
+		// IsNegotiating remains true until we receive an Answer in HandleAnswer
+	}()
 }
 
 func (r *Room) IsCreated() bool {
