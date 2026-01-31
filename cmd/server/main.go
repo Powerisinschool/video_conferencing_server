@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"os"
 	"video_conferencing_server/internal/handlers"
 	"video_conferencing_server/internal/logger"
 	"video_conferencing_server/internal/room"
@@ -25,8 +26,13 @@ func main() {
 	fs := http.FileServer(http.Dir("./static"))
 	http.Handle("/", fs)
 
-	logger.LogInfo("WebSocket server started on :8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	logger.LogInfo("WebSocket server started on :" + port)
+	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		logger.LogError("Error starting server", "error", err)
 	}
 }

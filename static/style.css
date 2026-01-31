@@ -356,25 +356,88 @@ video {
   border-left: 4px solid var(--accent-red);
 }
 
-/* Responsive */
+/* --- MOBILE RESPONSIVE --- */
 @media (max-width: 640px) {
+  :root {
+    --nav-height: 56px;
+    --control-bar-height: 72px;
+  }
+
   .app-header {
     padding: 0 16px;
   }
 
-  .brand h1 {
-    display: none; /* Hide title on small screens */
+  .app-header h1 {
+    font-size: 1rem;
+    max-width: 150px;
+  }
+
+  .lobby-card {
+    padding: 24px;
+    margin: 16px;
+    width: 100%;
   }
 
   .video-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr; /* Single column on mobile */
     padding: 10px;
     gap: 10px;
   }
 
-  .join-controls input {
-    min-width: 120px;
-    max-width: 150px;
+  /* On landscape mobile, allow 2 columns */
+  @media (orientation: landscape) {
+    .video-grid {
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    }
+
+    .video-grid:has(> .video-container:only-child) .video-container {
+      max-height: calc(100dvh - 140px); /* Tighter constraint in landscape */
+    }
+  }
+
+  /* Compact controls on mobile */
+  .control-bar {
+    gap: 12px;
+    padding: 0 16px;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .btn.control {
+    width: 48px;
+    height: 48px;
+  }
+
+  .btn.control .icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* Make leave button circular again on small mobile to save space */
+  .btn.control.leave-btn {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .btn.control.leave-btn .btn-text {
+    display: none;
+  }
+
+  /* Move notifications to top on mobile so they don't cover controls */
+  .notification-container {
+    bottom: auto;
+    top: 70px; /* Below header */
+    right: 16px;
+    left: 16px; /* Full width essentially */
+    align-items: center;
+  }
+
+  .notification-toast {
+    width: 100%;
+    justify-content: center;
+    min-width: auto;
   }
 }
 
